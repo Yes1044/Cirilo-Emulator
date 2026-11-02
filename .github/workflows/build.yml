@@ -5,12 +5,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: unzip -q cirilo.zip && git clone --depth 1 https://github.com/mgba-emu/mgba cirilo/mgba
+      - run: |
+          unzip -q cirilo.zip
+          git clone --depth 1 https://github.com/mgba-emu/mgba cirilo/mgba
+          sed -i 's/PROPERTIES PREFIX "" COMPILE_DEFINITIONS/PROPERTIES COMPILE_DEFINITIONS/' cirilo/mgba/CMakeLists.txt
+          ! grep -q 'PROPERTIES PREFIX "" COMPILE_DEFINITIONS' cirilo/mgba/CMakeLists.txt
       - uses: actions/setup-java@v4
         with: {distribution: temurin, java-version: 17}
       - uses: gradle/actions/setup-gradle@v4
         with: {gradle-version: "8.7"}
       - run: gradle assembleDebug --no-daemon
+        working-directory: cirilo
+      - run: unzip -l app/build/outputs/apk/debug/*.apk | grep "\.so"
         working-directory: cirilo
       - uses: actions/upload-artifact@v4
         with: {name: cirilo-debug, path: cirilo/app/build/outputs/apk/debug/*.apk}
