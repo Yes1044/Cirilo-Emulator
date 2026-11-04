@@ -7,7 +7,9 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           unzip -q cirilo.zip
-          git clone --depth 1 https://github.com/mgba-emu/mgba cirilo/mgba
+          git init cirilo/mgba && git -C cirilo/mgba fetch --depth 1 https://github.com/mgba-emu/mgba a67176cd3e6bf60a5016d7adc94357142dd12617 && git -C cirilo/mgba checkout FETCH_HEAD
+          cat cirilo/tools/cirilo_cheats.c >> cirilo/mgba/src/platform/libretro/libretro.c
+          grep -q cirilo_cheat_apply cirilo/mgba/src/platform/libretro/libretro.c
           sed -i 's/PROPERTIES PREFIX "" COMPILE_DEFINITIONS/PROPERTIES COMPILE_DEFINITIONS/' cirilo/mgba/CMakeLists.txt
           ! grep -q 'PROPERTIES PREFIX "" COMPILE_DEFINITIONS' cirilo/mgba/CMakeLists.txt
       - uses: actions/setup-java@v4
@@ -31,7 +33,10 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-      - run: unzip -l app/build/outputs/apk/debug/*.apk | grep "\.so"
+      - name: Comprobar que el núcleo exporta la API de trucos
         working-directory: cirilo
+        run: |
+          mkdir chk && unzip -q -o app/build/outputs/apk/debug/*.apk 'lib/*/libmgba_libretro.so' -d chk
+          for f in chk/lib/*/libmgba_libretro.so; do grep -q cirilo_cheat_apply "$f" && echo "ok: $f" || { echo "::error::$f no exporta cirilo_cheat_apply"; exit 1; }; done
       - uses: actions/upload-artifact@v4
         with: {name: cirilo-debug, path: cirilo/app/build/outputs/apk/debug/*.apk}
