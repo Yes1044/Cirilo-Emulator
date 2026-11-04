@@ -14,8 +14,23 @@ jobs:
         with: {distribution: temurin, java-version: 17}
       - uses: gradle/actions/setup-gradle@v4
         with: {gradle-version: "8.7"}
+      - name: Clave de firma
+        env:
+          KS: ${{ secrets.KEYSTORE_B64 }}
+          KP: ${{ secrets.KEYSTORE_PASSWORD }}
+          KA: ${{ secrets.KEY_ALIAS }}
+        run: |
+          if [ -z "$KS" ]; then echo "::error::Falta el secreto KEYSTORE_B64"; exit 1; fi
+          echo "$KS" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/cirilo.jks"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/cirilo.jks" >> "$GITHUB_ENV"
+          echo "SHA-1 de la clave de firma:"
+          keytool -list -v -keystore "$RUNNER_TEMP/cirilo.jks" -alias "$KA" -storepass "$KP" | grep "SHA1"
       - run: gradle assembleDebug --no-daemon
         working-directory: cirilo
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
       - run: unzip -l app/build/outputs/apk/debug/*.apk | grep "\.so"
         working-directory: cirilo
       - uses: actions/upload-artifact@v4
