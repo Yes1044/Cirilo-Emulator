@@ -17,9 +17,9 @@ jobs:
           L=mgba/include/mgba/internal/gba/sio/lockstep.h
           if [ -f tools/cirilo_link.c ] && grep -q GBASIOLockstepCoordinatorAttach $L && grep -q 'struct mLockstepUser' mgba/include/mgba/core/lockstep.h && grep -q 'add_library(${BINARY_NAME}_libretro SHARED ${CORE_SRC} ${RETRO_SRC} ${CORE_VFS_SRC})' mgba/CMakeLists.txt; then
             sed -i 's|add_library(${BINARY_NAME}_libretro SHARED ${CORE_SRC} ${RETRO_SRC} ${CORE_VFS_SRC})|add_library(${BINARY_NAME}_libretro SHARED ${CORE_SRC} ${RETRO_SRC} ${CORE_VFS_SRC} ${CMAKE_CURRENT_SOURCE_DIR}/src/gba/sio/lockstep.c)|' mgba/CMakeLists.txt
-            sed -i 's/^void retro_run(void) {/void cirilo_runframe(struct mCore*);\nvoid retro_run(void) {/; s/^\tcore->runFrame(core);/\tcirilo_runframe(core);/' mgba/src/platform/libretro/libretro.c
+            sed -i 's/^void retro_run(void) {/void cirilo_runframe(struct mCore*);\nvoid* cirilo_vbuf(void*);\nvoid retro_run(void) {/; s/^\tcore->runFrame(core);/\tcirilo_runframe(core);/; s/videoCallback(outputBuffer, width/videoCallback(cirilo_vbuf(outputBuffer), width/' mgba/src/platform/libretro/libretro.c
             cat tools/cirilo_link.c >> mgba/src/platform/libretro/libretro.c
-            if grep -q 'src/gba/sio/lockstep.c' mgba/CMakeLists.txt && grep -q 'cirilo_runframe(core);' mgba/src/platform/libretro/libretro.c && grep -q cirilo_link_attach mgba/src/platform/libretro/libretro.c; then echo "ok: cable de Link local incluido"
+            if grep -q 'src/gba/sio/lockstep.c' mgba/CMakeLists.txt && grep -q 'cirilo_runframe(core);' mgba/src/platform/libretro/libretro.c && grep -q 'cirilo_vbuf(outputBuffer)' mgba/src/platform/libretro/libretro.c && grep -q cirilo_link_attach mgba/src/platform/libretro/libretro.c; then echo "ok: cable de Link local incluido"
             else echo "::warning::No se pudo parchear mGBA para el cable de Link local: se sigue sin cable"; git -C mgba checkout -- .; fi
           else echo "::warning::Sin cable de Link local (falta tools/cirilo_link.c o este mGBA no trae el lockstep esperado)"; fi
       - name: Trucos y ajustes del núcleo
