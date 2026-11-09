@@ -52,13 +52,14 @@ jobs:
         run: |
           cd cirilo
           # Build instrumentada: cuenta qué partes del núcleo se usan al jugar (no cambia lo que hace, solo lo ralentiza). Al cerrar el juego se vuelca a disco y se exporta desde Ajustes → Misceláneo.
-          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"; [ -d "$NDK" ] || { echo "::error::No encuentro el NDK del runner"; exit 1; }
+          # NDK fijo = el que Gradle usa por defecto en este proyecto (sale en el log: «NDK (Side by side) 26.1.10909125»). Si cambias de versión de AGP y cambia, ponlo aquí y en el paso «usar».
+          NDKV=26.1.10909125
           cat tools/cirilo_pgo.c >> mgba/src/platform/libretro/libretro.c
           grep -q cirilo_pgo_dump mgba/src/platform/libretro/libretro.c
           # el mismo NDK en la build de perfil y en la que lo usa: así llvm-profdata y el compilador son de la misma versión
           for m in core core2; do
-            sed -i "s|-flto=thin -fwrapv|-flto=thin -fwrapv -fprofile-instr-generate|g; s|compileSdk=34|compileSdk=34;ndkPath=\"$NDK\"|" $m/build.gradle.kts
-            grep -q 'fprofile-instr-generate' $m/build.gradle.kts && grep -q ndkPath $m/build.gradle.kts
+            sed -i "s|-flto=thin -fwrapv|-flto=thin -fwrapv -fprofile-instr-generate|g; s|compileSdk=34|compileSdk=34;ndkVersion=\"$NDKV\"|" $m/build.gradle.kts
+            grep -q 'fprofile-instr-generate' $m/build.gradle.kts && grep -q ndkVersion $m/build.gradle.kts
           done
           echo "ok: build de perfil (núcleos instrumentados)"
       - name: Perfil PGO - usar (si hay cirilo-pgo.zip en el repositorio)
@@ -66,12 +67,14 @@ jobs:
         run: |
           # Todo o nada: si falta el zip, o algo no encaja, la compilación sigue normal (sin PGO). Solo se aplica al primer núcleo: el segundo (Link local) vive en otra carpeta y sus nombres no coinciden con el perfil.
           [ -f cirilo-pgo.zip ] || { echo "Sin cirilo-pgo.zip: compilación normal"; exit 0; }
-          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
-          PD="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-profdata"
-          if [ ! -x "$PD" ]; then echo "::warning::No encuentro llvm-profdata en el NDK del runner: compilación sin PGO"; exit 0; fi
+          NDKV=26.1.10909125   # el mismo que en el paso «generar»
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          PD="$SDK/ndk/$NDKV/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-profdata"
+          if [ ! -x "$PD" ]; then yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDKV" >/dev/null 2>&1 || true; fi
+          if [ ! -x "$PD" ]; then echo "::warning::No encuentro llvm-profdata del NDK $NDKV: compilación sin PGO"; exit 0; fi
           rm -rf pgo && mkdir pgo && unzip -q -o cirilo-pgo.zip -d pgo
           if ls pgo/*.profraw >/dev/null 2>&1 && "$PD" merge -o "$PWD/cirilo/cirilo.profdata" pgo/*.profraw; then
-            sed -i "s|-flto=thin -fwrapv|-flto=thin -fwrapv -fprofile-use=$PWD/cirilo/cirilo.profdata -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date -Wno-profile-instr-missing|g; s|compileSdk=34|compileSdk=34;ndkPath=\"$NDK\"|" cirilo/core/build.gradle.kts
+            sed -i "s|-flto=thin -fwrapv|-flto=thin -fwrapv -fprofile-use=$PWD/cirilo/cirilo.profdata -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date -Wno-profile-instr-missing|g; s|compileSdk=34|compileSdk=34;ndkVersion=\"$NDKV\"|" cirilo/core/build.gradle.kts
             grep -q 'fprofile-use' cirilo/core/build.gradle.kts && echo "ok: núcleo compilado con PGO" || echo "::warning::No se pudo activar PGO"
           else echo "::warning::No se pudo mezclar el perfil (¿zip vacío o de otra versión?): compilación sin PGO"; fi
       - name: Segundo núcleo para Link local (copia de mgba con otro nombre de biblioteca)
