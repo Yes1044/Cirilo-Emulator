@@ -62,18 +62,22 @@ jobs:
             grep -q 'fprofile-instr-generate' $m/build.gradle.kts && grep -q ndkVersion $m/build.gradle.kts
           done
           echo "ok: build de perfil (núcleos instrumentados)"
-      - name: Perfil PGO - usar (si hay cirilo-pgo.zip en el repositorio)
+      - name: Perfil PGO - usar (si hay cirilo-pgo*.zip en el repositorio)
         if: ${{ !inputs.perfil }}
         run: |
           # Todo o nada: si falta el zip, o algo no encaja, la compilación sigue normal (sin PGO). Solo se aplica al primer núcleo: el segundo (Link local) vive en otra carpeta y sus nombres no coinciden con el perfil.
-          [ -f cirilo-pgo.zip ] || { echo "Sin cirilo-pgo.zip: compilación normal"; exit 0; }
+          # Se usan TODOS los cirilo-pgo*.zip de la raíz del repositorio (uno acumulado, o varios de distintos juegos) y se mezclan solos.
+          shopt -s nullglob; Z=(cirilo-pgo*.zip)
+          [ ${#Z[@]} -gt 0 ] || { echo "Sin cirilo-pgo*.zip: compilación normal"; exit 0; }
           NDKV=26.1.10909125   # el mismo que en el paso «generar»
           SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           PD="$SDK/ndk/$NDKV/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-profdata"
           if [ ! -x "$PD" ]; then yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDKV" >/dev/null 2>&1 || true; fi
           if [ ! -x "$PD" ]; then echo "::warning::No encuentro llvm-profdata del NDK $NDKV: compilación sin PGO"; exit 0; fi
-          rm -rf pgo && mkdir pgo && unzip -q -o cirilo-pgo.zip -d pgo
-          if ls pgo/*.profraw >/dev/null 2>&1 && "$PD" merge -o "$PWD/cirilo/cirilo.profdata" pgo/*.profraw; then
+          rm -rf pgo && mkdir pgo; n=0
+          for z in "${Z[@]}"; do n=$((n+1)); mkdir "pgo/$n"; unzip -q -o "$z" -d "pgo/$n" || true; done
+          if ls pgo/*/*.profraw >/dev/null 2>&1 && "$PD" merge -o "$PWD/cirilo/cirilo.profdata" pgo/*/*.profraw; then
+            echo "perfiles mezclados: ${#Z[@]} zip(s), $(ls pgo/*/*.profraw | wc -l) .profraw"
             sed -i "s|-flto=thin -fwrapv|-flto=thin -fwrapv -fprofile-use=$PWD/cirilo/cirilo.profdata -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date -Wno-profile-instr-missing|g; s|compileSdk=34|compileSdk=34;ndkVersion=\"$NDKV\"|" cirilo/core/build.gradle.kts
             grep -q 'fprofile-use' cirilo/core/build.gradle.kts && echo "ok: núcleo compilado con PGO" || echo "::warning::No se pudo activar PGO"
           else echo "::warning::No se pudo mezclar el perfil (¿zip vacío o de otra versión?): compilación sin PGO"; fi
