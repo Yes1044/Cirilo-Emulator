@@ -81,6 +81,29 @@ jobs:
             sed -i "s|-flto=thin -fwrapv|-flto=thin -fwrapv -fprofile-use=$PWD/cirilo/cirilo.profdata -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date -Wno-profile-instr-missing|g; s|compileSdk=34|compileSdk=34;ndkVersion=\"$NDKV\"|" cirilo/core/build.gradle.kts
             grep -q 'fprofile-use' cirilo/core/build.gradle.kts && echo "ok: núcleo compilado con PGO" || echo "::warning::No se pudo activar PGO"
           else echo "::warning::No se pudo mezclar el perfil (¿zip vacío o de otra versión?): compilación sin PGO"; fi
+      - name: Ajustes avanzados (tipo de guardado y mosaico) en el núcleo
+        run: |
+          cd cirilo
+          # Añade tools/cirilo_adv.c y parchea mGBA para poder forzar el tipo de guardado GBA y apagar el mosaico. Cada parche es opcional: si este mGBA no encaja, esa opción queda sin efecto (la app y el resto siguen igual).
+          [ -f tools/cirilo_adv.c ] || { echo "::warning::Falta tools/cirilo_adv.c: sin ajustes avanzados en el núcleo"; exit 0; }
+          D=mgba/include/mgba/internal/gba/savedata.h; O=mgba/src/gba/overrides.c; [ -f "$O" ] || O=mgba/src/gba/override.c
+          FLAG=""
+          if [ -f "$O" ] && [ -f "$D" ] && [ "$(grep -c 'if (override->savetype != GBA_SAVEDATA_AUTODETECT) {' "$O")" = 1 ] && grep -q 'GBASavedataForceType(&gba->memory.savedata, override->savetype);' "$O" \
+             && grep -Eq 'GBA_SAVEDATA_(EEPROM|SRAM|FLASH512|FLASH1M|FORCE_NONE|AUTODETECT)' "$D" && grep -q GBA_SAVEDATA_FLASH1M "$D" && grep -q GBA_SAVEDATA_FLASH512 "$D" && grep -q GBA_SAVEDATA_FORCE_NONE "$D"; then
+            sed -i 's|if (override->savetype != GBA_SAVEDATA_AUTODETECT) {|if (cirilo_savetype != -2) {\n\t\tGBASavedataForceType(\&gba->memory.savedata, (enum SavedataType) cirilo_savetype);\n\t} else if (override->savetype != GBA_SAVEDATA_AUTODETECT) {|' "$O"
+            sed -i '0,/^#include/s//extern int cirilo_savetype;\n#include/' "$O"
+            FLAG="#define CIRILO_HAVE_SAVEFORCE 1"; echo "ok: tipo de guardado forzable"
+          else echo "::warning::No se pudo preparar «Tipo de guardado del cartucho»: la opción no tendrá efecto"; fi
+          n=0
+          for f in mgba/src/gba/renderers/*.c; do
+            if grep -Eq 'GBARegisterBGCNTIsMosaic\([^()]*\)|GBAObjAttributesAIsMosaic\([^()]*\)' "$f"; then
+              sed -i -E 's/(GBARegisterBGCNTIsMosaic|GBAObjAttributesAIsMosaic)\(([^()]*)\)/(cirilo_mosaic \&\& \1(\2))/g' "$f"
+              sed -i '0,/^#include/s//extern int cirilo_mosaic;\n#include/' "$f"; n=$((n+1))
+            fi
+          done
+          if [ "$n" -gt 0 ]; then echo "ok: mosaico desactivable ($n archivos)"; else echo "::warning::No se encontró el mosaico en los renderizadores: la opción no tendrá efecto"; fi
+          { echo "$FLAG"; cat tools/cirilo_adv.c; } >> mgba/src/platform/libretro/libretro.c
+          grep -q cirilo_adv_set mgba/src/platform/libretro/libretro.c
       - name: Segundo núcleo para Link local (copia de mgba con otro nombre de biblioteca)
         run: |
           cd cirilo
