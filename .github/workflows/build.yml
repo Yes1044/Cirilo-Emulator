@@ -145,12 +145,3 @@ jobs:
           else echo "::warning::APK SIN camino rápido de memoria"; fi
       - uses: actions/upload-artifact@v4
         with: {name: cirilo-debug, path: cirilo/app/build/outputs/apk/debug/*.apk}
-bmgba_libretro.so; do grep -q cirilo_cheat_apply "$f" && echo "ok trucos: $f" || { echo "::error::$f no exporta cirilo_cheat_apply"; exit 1; }; done
-          if [ -d mgba2 ]; then for f in chk/lib/*/libmgba2_libretro.so; do [ -f "$f" ] && echo "ok segundo núcleo: $f" || { echo "::error::falta libmgba2_libretro.so en el APK"; exit 1; }; done; else echo "::warning::APK SIN segundo núcleo"; fi
-          grep -q cirilo_link_attach mgba/src/platform/libretro/libretro.c && { for f in chk/lib/*/libmgba_libretro.so; do grep -q cirilo_link_attach "$f" && echo "ok cable: $f" || { echo "::error::$f no exporta cirilo_link_attach"; exit 1; }; done; } || echo "::warning::APK SIN cable de Link local"
-          grep -q cirilo_prof_take mgba/src/platform/libretro/libretro.c && { for f in chk/lib/*/libmgba_libretro.so; do grep -q cirilo_prof_take "$f" && echo "ok medidor: $f" || { echo "::error::$f no exporta cirilo_prof_take"; exit 1; }; done; } || echo "::warning::APK SIN medidor de CPU"
-          # cirilo_ld32/stN son `static inline`: con -O3 el compilador las integra y no queda símbolo que buscar en el .so (a diferencia de cirilo_cheat_apply/cirilo_link_attach/cirilo_prof_take, con enlace externo). Solo se puede comprobar en la fuente.
-          if grep -q cirilo_ld32 mgba/include/mgba/internal/gba/cirilo_fast.h 2>/dev/null && grep -q 'cirilo_ld32(' mgba/src/arm/isa-arm.c; then echo "ok camino rápido: aplicado en la fuente (el job «regression» ya comprueba que el .so compilado se comporta igual)"
-          else echo "::warning::APK SIN camino rápido de memoria"; fi
-      - uses: actions/upload-artifact@v4
-        with: {name: cirilo-debug, path: cirilo/app/build/outputs/apk/debug/*.apk}
