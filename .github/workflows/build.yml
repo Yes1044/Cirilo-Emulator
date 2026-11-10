@@ -86,10 +86,17 @@ jobs:
               echo "Ejemplo de nombres con ruta en el perfil (para comprobar el prefijo):"; grep -m4 -E '\.(c|h|cpp):' pgo/perfil.txt || true
               T0=$(grep -cE '(^|/)mgba/(src|include)/' pgo/perfil.txt || true)
               sed -E '/\.(c|h|cpp):/ s#(^|/)mgba/(src|include)/#\1mgba2/\2/#g' pgo/perfil.txt > pgo/perfil2.txt
-              if [ "${T0:-0}" -gt 0 ] && "$PD" merge -o "$PWD/cirilo/cirilo2.profdata" pgo/perfil2.txt; then
-              sed -i "s|-flto=thin -fwrapv|-flto=thin -fwrapv -fprofile-use=$PWD/cirilo/cirilo2.profdata -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date -Wno-profile-instr-missing|g; s|compileSdk=34|compileSdk=34;ndkVersion=\"$NDKV\"|" cirilo/core2/build.gradle.kts
-                grep -q 'fprofile-use' cirilo/core2/build.gradle.kts && echo "ok: segundo núcleo compilado con PGO (${T0} nombres con ruta renombrados)" || echo "::warning::No se pudo activar PGO en el segundo núcleo"
-              else echo "::warning::Segundo núcleo sin PGO: no se encontró la ruta mgba/ en los nombres del perfil (mira el ejemplo de arriba y dime cómo son)"; fi
+              P2=""
+              if [ "${T0:-0}" -gt 0 ]; then
+                "$PD" merge -o "$PWD/cirilo/cirilo2.profdata" pgo/perfil2.txt && { P2=1; MSG="${T0} nombres con ruta renombrados"; }
+              elif grep -qE '^[A-Za-z0-9_.+-]+\.(c|h|cpp):' pgo/perfil.txt; then
+                # LLVM guarda las funciones static solo como «archivo.c:función» (sin carpeta): los nombres de mgba/ y mgba2/ ya coinciden, vale el mismo perfil
+                cp cirilo/cirilo.profdata cirilo/cirilo2.profdata && { P2=1; MSG="los nombres no llevan ruta: mismo perfil que el primer núcleo"; }
+              fi
+              if [ -n "$P2" ]; then
+                sed -i "s|-flto=thin -fwrapv|-flto=thin -fwrapv -fprofile-use=$PWD/cirilo/cirilo2.profdata -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date -Wno-profile-instr-missing|g; s|compileSdk=34|compileSdk=34;ndkVersion=\"$NDKV\"|" cirilo/core2/build.gradle.kts
+                grep -q 'fprofile-use' cirilo/core2/build.gradle.kts && echo "ok: segundo núcleo compilado con PGO ($MSG)" || echo "::warning::No se pudo activar PGO en el segundo núcleo"
+              else echo "::warning::Segundo núcleo sin PGO: no reconozco los nombres del perfil (mira el ejemplo de arriba y dime cómo son)"; fi
             fi
           else echo "::warning::No se pudo mezclar el perfil (¿zip vacío o de otra versión?): compilación sin PGO"; fi
       - name: Ajustes avanzados (tipo de guardado y mosaico) en el núcleo
