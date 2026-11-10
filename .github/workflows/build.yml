@@ -92,7 +92,7 @@ jobs:
           SAVELINE='GBASavedataForceType(&gba->memory.savedata, override->savetype);'
           if [ -n "$O" ] && [ "$(grep -c 'if (override->savetype != GBA_SAVEDATA_AUTODETECT) {' "$O")" = 1 ] && grep -q -F "$SAVELINE" "$O" \
              && ( for e in GBA_SAVEDATA_EEPROM GBA_SAVEDATA_SRAM GBA_SAVEDATA_FLASH512 GBA_SAVEDATA_FLASH1M GBA_SAVEDATA_FORCE_NONE GBA_SAVEDATA_AUTODETECT; do grep -rqw "$e" mgba/include || exit 1; done ); then
-            sed -i 's|if (override->savetype != GBA_SAVEDATA_AUTODETECT) {|if (cirilo_savetype != -2) {\n\t\tGBASavedataForceType(\&gba->memory.savedata, (enum SavedataType) cirilo_savetype);\n\t} else if (override->savetype != GBA_SAVEDATA_AUTODETECT) {|' "$O"
+            sed -i 's|if (override->savetype != GBA_SAVEDATA_AUTODETECT) {|if (cirilo_savetype != -2) {\n\t\tGBASavedataForceType(\&gba->memory.savedata, (enum GBASavedataType) cirilo_savetype);\n\t} else if (override->savetype != GBA_SAVEDATA_AUTODETECT) {|' "$O"
             sed -i '0,/^#include/s//extern int cirilo_savetype;\n#include/' "$O"
             FLAG="#define CIRILO_HAVE_SAVEFORCE 1"; echo "ok: tipo de guardado forzable ($O)"
           else
@@ -100,6 +100,11 @@ jobs:
             echo "--- diagnóstico: archivo=$O"; [ -n "$O" ] && grep -n 'savetype\|GBASavedataForce' "$O" | head -20
             echo "--- enums:"; grep -rn 'GBA_SAVEDATA_' mgba/include | head -12
           fi
+          if [ -f mgba/src/gb/mbc.c ] && [ "$(grep -c 'GBResizeSram(gb, sramSize);' mgba/src/gb/mbc.c)" = 1 ] && grep -q 'const struct GBCartridge\* cart = ' mgba/src/gb/mbc.c; then
+            sed -i 's|GBResizeSram(gb, sramSize);|sramSize = cirilo_gb_sram(sramSize, (cart->cgb \& 0x80) != 0, gb->memory.mbcType);\n\tGBResizeSram(gb, sramSize);|' mgba/src/gb/mbc.c
+            sed -i '0,/^#include/s//unsigned long cirilo_gb_sram(unsigned long, int, int);\n#include/' mgba/src/gb/mbc.c
+            echo "ok: tamaño de guardado GB/GBC forzable"
+          else echo "::warning::No se pudo preparar el tamaño de guardado de GB/GBC: esas opciones no tendrán efecto"; fi
           n=0
           for f in mgba/src/gba/renderers/*.c; do
             if grep -Eq 'GBARegisterBGCNTIsMosaic\([^()]*\)|GBAObjAttributesAIsMosaic\([^()]*\)' "$f"; then
