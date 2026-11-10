@@ -86,14 +86,20 @@ jobs:
           cd cirilo
           # Añade tools/cirilo_adv.c y parchea mGBA para poder forzar el tipo de guardado GBA y apagar el mosaico. Cada parche es opcional: si este mGBA no encaja, esa opción queda sin efecto (la app y el resto siguen igual).
           [ -f tools/cirilo_adv.c ] || { echo "::warning::Falta tools/cirilo_adv.c: sin ajustes avanzados en el núcleo"; exit 0; }
-          D=mgba/include/mgba/internal/gba/savedata.h; O=mgba/src/gba/overrides.c; [ -f "$O" ] || O=mgba/src/gba/override.c
           FLAG=""
-          if [ -f "$O" ] && [ -f "$D" ] && [ "$(grep -c 'if (override->savetype != GBA_SAVEDATA_AUTODETECT) {' "$O")" = 1 ] && grep -q 'GBASavedataForceType(&gba->memory.savedata, override->savetype);' "$O" \
-             && grep -Eq 'GBA_SAVEDATA_(EEPROM|SRAM|FLASH512|FLASH1M|FORCE_NONE|AUTODETECT)' "$D" && grep -q GBA_SAVEDATA_FLASH1M "$D" && grep -q GBA_SAVEDATA_FLASH512 "$D" && grep -q GBA_SAVEDATA_FORCE_NONE "$D"; then
+          # Los archivos se buscan por contenido (cambian de sitio entre versiones de mGBA); el enum SavedataType puede estar en interface.h o en savedata.h
+          O=$(grep -rl 'GBAOverrideApply(struct GBA\*' mgba/src/gba --include=*.c | head -1)
+          SAVELINE='GBASavedataForceType(&gba->memory.savedata, override->savetype);'
+          if [ -n "$O" ] && [ "$(grep -c 'if (override->savetype != GBA_SAVEDATA_AUTODETECT) {' "$O")" = 1 ] && grep -q -F "$SAVELINE" "$O" \
+             && ( for e in GBA_SAVEDATA_EEPROM GBA_SAVEDATA_SRAM GBA_SAVEDATA_FLASH512 GBA_SAVEDATA_FLASH1M GBA_SAVEDATA_FORCE_NONE GBA_SAVEDATA_AUTODETECT; do grep -rqw "$e" mgba/include || exit 1; done ); then
             sed -i 's|if (override->savetype != GBA_SAVEDATA_AUTODETECT) {|if (cirilo_savetype != -2) {\n\t\tGBASavedataForceType(\&gba->memory.savedata, (enum SavedataType) cirilo_savetype);\n\t} else if (override->savetype != GBA_SAVEDATA_AUTODETECT) {|' "$O"
             sed -i '0,/^#include/s//extern int cirilo_savetype;\n#include/' "$O"
-            FLAG="#define CIRILO_HAVE_SAVEFORCE 1"; echo "ok: tipo de guardado forzable"
-          else echo "::warning::No se pudo preparar «Tipo de guardado del cartucho»: la opción no tendrá efecto"; fi
+            FLAG="#define CIRILO_HAVE_SAVEFORCE 1"; echo "ok: tipo de guardado forzable ($O)"
+          else
+            echo "::warning::No se pudo preparar «Tipo de guardado del cartucho»: la opción no tendrá efecto"
+            echo "--- diagnóstico: archivo=$O"; [ -n "$O" ] && grep -n 'savetype\|GBASavedataForce' "$O" | head -20
+            echo "--- enums:"; grep -rn 'GBA_SAVEDATA_' mgba/include | head -12
+          fi
           n=0
           for f in mgba/src/gba/renderers/*.c; do
             if grep -Eq 'GBARegisterBGCNTIsMosaic\([^()]*\)|GBAObjAttributesAIsMosaic\([^()]*\)' "$f"; then
