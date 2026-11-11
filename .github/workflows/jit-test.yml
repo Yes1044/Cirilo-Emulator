@@ -1,0 +1,37 @@
+name: Pruebas del JIT (diferenciales)
+# Manual: pestaña Actions → «Pruebas del JIT (diferenciales)» → Run workflow. No toca el APK ni el workflow de compilación.
+# Compila dos núcleos del mismo mGBA (referencia sin tocar y candidato con los parches de Cirilo) y exige estado, vídeo y audio idénticos en cada fotograma.
+# Corre en arm64 nativo (el que usará el JIT) y en x86-64 (para comprobar el propio arnés).
+on:
+  workflow_dispatch:
+    inputs:
+      semillas: {description: "ROMs aleatorias por modo (arm, thumb, mixed, smc)", default: "24"}
+      fotogramas: {description: "Fotogramas por ROM", default: "600"}
+      jit: {description: "Activar el JIT en el candidato (a partir de la Fase 1)", type: boolean, default: false}
+jobs:
+  prueba:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04-arm, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencias
+        run: sudo apt-get update -q && sudo apt-get install -y -q cmake clang lld llvm
+      - name: Preparar y probar
+        run: |
+          unzip -q cirilo.zip
+          cd cirilo
+          uname -m
+          SEEDS='${{ inputs.semillas }}' FRAMES='${{ inputs.fotogramas }}' JIT=$([ '${{ inputs.jit }}' = true ] && echo 1 || echo 0) bash tools/test/jit_test.sh
+      - name: Guardar registros y casos fallidos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jit-test-${{ matrix.os }}
+          path: |
+            cirilo/jit_work/logs
+            cirilo/jit_work/fallos
+            cirilo/jit_work/resumen.md
+          if-no-files-found: ignore
