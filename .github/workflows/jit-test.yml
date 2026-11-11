@@ -7,7 +7,7 @@ on:
     inputs:
       semillas: {description: "ROMs aleatorias por modo (arm, thumb, mixed, smc)", default: "24"}
       fotogramas: {description: "Fotogramas por ROM", default: "600"}
-      jit: {description: "Activar el JIT en el candidato (a partir de la Fase 1)", type: boolean, default: false}
+      jit: {description: "Activar el JIT en el candidato (Fase 1 en adelante; apágalo para repetir solo la Fase 0)", type: boolean, default: true}
 jobs:
   prueba:
     strategy:

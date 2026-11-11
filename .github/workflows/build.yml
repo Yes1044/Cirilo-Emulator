@@ -49,6 +49,13 @@ jobs:
           TUNE=cortex-a76
           if [ -f tools/cirilo_fast_patch.py ] && [ -f tools/cirilo_fast.h ] && python3 tools/cirilo_fast_patch.py mgba "$TUNE"; then echo "ok: camino rápido de memoria"
           else echo "::warning::Sin camino rápido de memoria: el núcleo sigue como mGBA original"; fi
+      - name: JIT experimental de la CPU de GBA (Fase 1, opcional)
+        run: |
+          cd cirilo
+          # tools/cirilo_jit_patch.py (todo o nada) añade la caché de bloques y la vigilancia de código automodificable. Va DESPUÉS del camino rápido (que le añade los avisos a cirilo_fast.h) y ANTES de copiar mgba a mgba2.
+          # Se activa desde la app: Opciones → Avanzado → «Usar JIT experimental». Si el parche no encaja con este mGBA, el núcleo queda sin JIT y la app lo ignora.
+          if [ -f tools/cirilo_jit_patch.py ] && [ -f tools/cirilo_jit.h ] && [ -f tools/cirilo_jit_arm.inc ] && python3 tools/cirilo_jit_patch.py mgba; then echo "ok: JIT"
+          else echo "::warning::Sin JIT: el núcleo usa solo el intérprete"; fi
       - name: Perfil PGO - generar (solo si marcas «perfil»)
         if: ${{ inputs.perfil }}
         run: |
